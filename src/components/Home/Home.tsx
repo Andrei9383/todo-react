@@ -26,7 +26,7 @@ import {
 import { getDatabase, ref, set } from "firebase/database";
 import { SetStateAction, useEffect, useState } from "react";
 import useWindowDimensions from "../WindowDimensions/useWindowDimensions";
-import { ArrowAutofitRight, Books, Plus } from "tabler-icons-react";
+import { ArrowAutofitRight, Books, Check, Plus } from "tabler-icons-react";
 
 import {
   Button,
@@ -80,6 +80,20 @@ import { FirebaseError } from "firebase/app";
 import { updateDoc, serverTimestamp } from "firebase/firestore";
 import { onSnapshot } from "firebase/firestore";
 import { EMLINK } from "constants";
+import { useRef } from "react";
+
+import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  AlertDialogCloseButton,
+  useDisclosure,
+} from "@chakra-ui/react";
+import { FaTasks } from "react-icons/fa";
+import { Checkbox, CheckboxGroup } from "@chakra-ui/react";
 
 const googleSVG = (
   <svg
@@ -124,6 +138,17 @@ export function Home() {
 
   const [todoValue, setTodoValue] = useState("");
 
+  const [currElement, setCurrElement] = useState(null);
+  const [currIndex, setCurrIndex] = useState(0);
+
+  const taskRef = useRef(null);
+  const todoRef = useRef(null);
+
+  const [todayTaskInputValue, setTodayTaskInputValue] = useState("");
+  const handleTodayTaskInputValueChange = (event: {
+    target: { value: SetStateAction<string> };
+  }) => setTodayTaskInputValue(event.target.value);
+
   const auth = getAuth();
   useEffect(() => {
     onAuthStateChanged(auth, (user) => {
@@ -153,6 +178,7 @@ export function Home() {
       todo: todayInputValue,
       created_at: serverTimestamp(),
       tasks: [],
+      completed: false,
     });
   };
 
@@ -178,6 +204,56 @@ export function Home() {
     await updateDoc(doc(db, auth.currentUser?.uid, uid), {
       todo: todoValue,
     });
+  };
+
+  const addTask = async (element, index, taskValue) => {
+    const q = query(
+      collection(db, auth.currentUser?.uid),
+      where("todo", "==", element.todo)
+    );
+    const aux = await getDocs(q);
+    const log = aux.docs[0];
+    const uid = log.id;
+    const task = {
+      task: taskValue,
+      completed: false,
+    };
+    await updateDoc(
+      doc(db, auth.currentUser?.uid, uid),
+      {
+        tasks: [...log.data().tasks, task],
+      },
+      { merge: true }
+    );
+    setTodayTaskInputValue("");
+  };
+
+  const updateTask = async (element, task, index) => {
+    const q = query(
+      collection(db, auth.currentUser?.uid),
+      where("todo", "==", element.todo)
+    );
+    const aux = await getDocs(q);
+    const log = aux.docs[0];
+    const uid = log.id;
+    let tasks = log.data().tasks;
+    tasks[index].completed = !tasks[index].completed;
+    let shouldDelete = true;
+    tasks.forEach((element) => {
+      if (element.completed == false) {
+        shouldDelete = false;
+      }
+    });
+    if (shouldDelete) {
+      deleteTodo(element, index);
+    }
+    await updateDoc(
+      doc(db, auth.currentUser?.uid, uid),
+      {
+        tasks: tasks,
+      },
+      { merge: true }
+    );
   };
 
   function EditableControls(element, index) {
@@ -222,6 +298,14 @@ export function Home() {
       </Editable>
     );
   }
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const cancelRef = useRef();
+
+  const handleClick = (element, index) => {
+    setCurrElement(element);
+    setCurrIndex(index);
+    onOpen();
+  };
 
   return (
     <>
@@ -237,6 +321,9 @@ export function Home() {
                 onClick={logout}
                 aria-label={"Log out"}
                 icon={<Logout />}
+                style={{ borderRadius: "30%" }}
+                colorScheme="teal"
+                variant="ghost"
               >
                 Logout
               </IconButton>
@@ -266,14 +353,18 @@ export function Home() {
                       children={<Plus color={"gray"} />}
                     />
                     <Input
+                      autoFocus={true}
                       value={todayInputValue}
                       onChange={handleTodayInputValueChange}
                       placeholder="To Do"
-                      colorScheme={"blue"}
-                      variant="outline"
+                      colorScheme={"teal"}
+                      variant="filled"
+                      focusBorderColor={"teal.500"}
                     ></Input>
                   </InputGroup>
                   <Button
+                    style={{ borderRadius: "20px", padding: "20px" }}
+                    colorScheme="teal"
                     onClick={() =>
                       todayInputValue != ""
                         ? (writeTodo(), setTodayInputValue(""))
@@ -291,33 +382,49 @@ export function Home() {
               ? Todos.map((element, index) => {
                   return (
                     <>
-                      {index > 0 && <Divider />}
+                      {index > 0 && <Divider key={index} />}
                       <Flex
                         key={index}
                         w="100%"
                         p={3}
                         my={1}
-                        borderRadius={5}
+                        borderRadius={3}
                         justifyContent="space-between"
                         align="center"
                       >
                         <Text fontSize={"xl"} mr={4} key={index} as="b">
                           {index + 1}.
                         </Text>
-                        <Text key={index}>{element.todo}</Text>
+                        {element.tasks.length == 0 ? (
+                          <Checkbox
+                            colorScheme={"teal"}
+                            size="lg"
+                            onChange={() => {
+                              deleteTodo(element, index);
+                            }}
+                          >
+                            <Text as="b">{element.todo}</Text>
+                          </Checkbox>
+                        ) : (
+                          <Text key={index} fontSize={"lg"} as="b">
+                            {element.todo}
+                          </Text>
+                        )}
+
                         <Menu key={index}>
                           <MenuButton
                             key={index}
                             as={IconButton}
                             aria-label="Options"
                             icon={<HamburgerIcon />}
-                            variant="outline"
+                            style={{ borderRadius: "30%" }}
+                            colorScheme="teal"
                           />
                           <MenuList key={index}>
                             <MenuItem
                               key={index}
                               onClick={() => {
-                                addTask(element, index);
+                                handleClick(element, index);
                               }}
                               icon={<AddIcon />}
                               command="⌘T"
@@ -337,10 +444,79 @@ export function Home() {
                           </MenuList>
                         </Menu>
                       </Flex>
+                      <Center>
+                        <VStack>
+                          {element.tasks.map((task, index) => {
+                            return (
+                              <>
+                                <Checkbox
+                                  key={index}
+                                  size="lg"
+                                  colorScheme={"teal"}
+                                  checked={task.completed}
+                                  defaultChecked={task.completed}
+                                  onChange={() => {
+                                    updateTask(element, task, index);
+                                  }}
+                                >
+                                  {task.task}
+                                </Checkbox>
+                              </>
+                            );
+                          })}
+                        </VStack>
+                      </Center>
                     </>
                   );
                 })
               : null}
+            <>
+              <AlertDialog
+                motionPreset="slideInBottom"
+                leastDestructiveRef={taskRef}
+                onClose={onClose}
+                isOpen={isOpen}
+                isCentered
+              >
+                <AlertDialogOverlay />
+
+                <AlertDialogContent borderRadius={"20px"}>
+                  <AlertDialogHeader>Create New Task</AlertDialogHeader>
+                  <AlertDialogCloseButton />
+                  <AlertDialogBody>
+                    <Input
+                      ref={taskRef}
+                      value={todayTaskInputValue}
+                      onChange={handleTodayTaskInputValueChange}
+                      placeholder="Task"
+                      variant={"filled"}
+                      borderRadius="50px"
+                      focusBorderColor={"teal.500"}
+                    />
+                  </AlertDialogBody>
+                  <AlertDialogFooter>
+                    <Button
+                      ref={cancelRef}
+                      onClick={onClose}
+                      borderRadius="50px"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      colorScheme="teal"
+                      ml={3}
+                      borderRadius={"50px"}
+                      onClick={() => {
+                        addTask(currElement, currIndex, todayTaskInputValue);
+                        onClose();
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
           </Container>
         </VStack>
       </Center>

@@ -22,6 +22,9 @@ export const ColorModeSwitcher: React.FC<ColorModeSwitcherProps> = (props) => {
       onClick={toggleColorMode}
       icon={<SwitchIcon />}
       aria-label={`Switch to ${text} mode`}
+      style={{ borderRadius: "30%" }}
+      colorScheme="teal"
+      variant="ghost"
       {...props}
     />
   );
