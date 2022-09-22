@@ -1,7 +1,7 @@
 {
   "name": "todo",
   "version": "1.0",
-  "homepage": "https://Andrei9383.github.io/todo",
+  "homepage": "https://Andrei9383.github.io/todo-react",
   "private": true,
   "dependencies": {
     "@chakra-ui/icons": "^2.0.9",
