@@ -21,6 +21,7 @@ import {
   setDoc,
   addDoc,
   getDocs,
+  deleteDoc,
 } from "firebase/firestore";
 import { getDatabase, ref, set } from "firebase/database";
 import { SetStateAction, useEffect, useState } from "react";
@@ -62,7 +63,18 @@ import {
   ExternalLinkIcon,
   RepeatIcon,
   EditIcon,
+  DeleteIcon,
+  CloseIcon,
+  CheckIcon,
 } from "@chakra-ui/icons";
+
+import {
+  Editable,
+  EditableInput,
+  EditableTextarea,
+  EditablePreview,
+  useEditableControls,
+} from "@chakra-ui/react";
 
 import { FirebaseError } from "firebase/app";
 import { updateDoc, serverTimestamp } from "firebase/firestore";
@@ -110,6 +122,8 @@ export function Home() {
 
   const [uid, setUid] = useState("");
 
+  const [todoValue, setTodoValue] = useState("");
+
   const auth = getAuth();
   useEffect(() => {
     onAuthStateChanged(auth, (user) => {
@@ -134,12 +148,80 @@ export function Home() {
 
   const writeTodo = async () => {
     const db2 = getDatabase();
-    await setDoc(doc(db, auth.currentUser?.uid, todayInputValue), {
+    await addDoc(collection(db, auth.currentUser?.uid), {
       created_by: auth.currentUser?.uid,
       todo: todayInputValue,
       created_at: serverTimestamp(),
+      tasks: [],
     });
   };
+
+  const deleteTodo = async (element, index) => {
+    const q = query(
+      collection(db, auth.currentUser?.uid),
+      where("todo", "==", element.todo)
+    );
+    const aux = await getDocs(q);
+    const log = aux.docs[0];
+    const uid = log.id;
+    await deleteDoc(doc(db, auth.currentUser?.uid, uid));
+  };
+
+  const editTodo = async (element, index, todoValue) => {
+    const q = query(
+      collection(db, auth.currentUser?.uid),
+      where("todo", "==", element.todo)
+    );
+    const aux = await getDocs(q);
+    const log = aux.docs[0];
+    const uid = log.id;
+    await updateDoc(doc(db, auth.currentUser?.uid, uid), {
+      todo: todoValue,
+    });
+  };
+
+  function EditableControls(element, index) {
+    const {
+      isEditing,
+      getSubmitButtonProps,
+      getCancelButtonProps,
+      getEditButtonProps,
+    } = useEditableControls();
+
+    return isEditing ? (
+      <ButtonGroup size="sm">
+        <IconButton
+          icon={<CheckIcon />}
+          {...(getSubmitButtonProps(), editTodo(element, index))}
+        />
+        <IconButton icon={<CloseIcon />} {...getCancelButtonProps()} />
+      </ButtonGroup>
+    ) : (
+      <IconButton
+        size="md"
+        variant={"outline"}
+        icon={<EditIcon />}
+        {...getEditButtonProps()}
+      />
+    );
+  }
+
+  function CustomControlsExample() {
+    /* Here's a custom control */
+
+    return (
+      <Editable
+        textAlign="center"
+        defaultValue="Rasengan ⚡️"
+        isPreviewFocusable={false}
+      >
+        <EditablePreview />
+        {/* Here is the custom input */}
+        <Input as={EditableInput} />
+        <EditableControls />
+      </Editable>
+    );
+  }
 
   return (
     <>
@@ -192,10 +274,11 @@ export function Home() {
                     ></Input>
                   </InputGroup>
                   <Button
-                    onClick={() => {
-                      writeTodo();
-                      setTodayInputValue("");
-                    }}
+                    onClick={() =>
+                      todayInputValue != ""
+                        ? (writeTodo(), setTodayInputValue(""))
+                        : null
+                    }
                   >
                     <Text>Add Todo</Text>
                   </Button>
@@ -214,33 +297,42 @@ export function Home() {
                         w="100%"
                         p={3}
                         my={1}
-                        align="center"
                         borderRadius={5}
                         justifyContent="space-between"
+                        align="center"
                       >
                         <Text fontSize={"xl"} mr={4} key={index} as="b">
                           {index + 1}.
                         </Text>
                         <Text key={index}>{element.todo}</Text>
-                        <Menu>
+                        <Menu key={index}>
                           <MenuButton
+                            key={index}
                             as={IconButton}
                             aria-label="Options"
                             icon={<HamburgerIcon />}
                             variant="outline"
                           />
-                          <MenuList>
-                            <MenuItem icon={<AddIcon />} command="⌘T">
-                              New Tab
+                          <MenuList key={index}>
+                            <MenuItem
+                              key={index}
+                              onClick={() => {
+                                addTask(element, index);
+                              }}
+                              icon={<AddIcon />}
+                              command="⌘T"
+                            >
+                              New Task
                             </MenuItem>
-                            <MenuItem icon={<ExternalLinkIcon />} command="⌘N">
-                              New Window
-                            </MenuItem>
-                            <MenuItem icon={<RepeatIcon />} command="⌘⇧N">
-                              Open Closed Tab
-                            </MenuItem>
-                            <MenuItem icon={<EditIcon />} command="⌘O">
-                              Open File...
+                            <MenuItem
+                              key={index}
+                              onClick={() => {
+                                deleteTodo(element, index);
+                              }}
+                              icon={<DeleteIcon />}
+                              command="⌘DEL"
+                            >
+                              Delete Todo
                             </MenuItem>
                           </MenuList>
                         </Menu>
